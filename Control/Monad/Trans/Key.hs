@@ -1,24 +1,36 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Control.Monad.Trans.Key (Keyring, Key, newKey, unKeyring) where
+module Control.Monad.Trans.Key (Key, newKey, Keyring, unKeyring, KeyringT, unKeyringT) where
 
 import Control.Applicative
-import Control.Monad (guard)
+import Control.Monad (MonadPlus (..), guard)
+import Control.Monad.Fail
+import Control.Monad.Fix
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.Reader
+import Data.Functor.Identity
 import Data.IORef
 import Data.Type.Equality
 import Numeric.Natural
 import System.IO.Unsafe
 import Unsafe.Coerce
 
-newtype Keyring s a = Keyring (IORef Natural -> a) deriving (Functor, Applicative, Monad)
 newtype Key s a = Key Natural
 
 instance TestEquality (Key s) where
     Key i `testEquality` Key j = unsafeCoerce Refl <$ guard (i == j)
 
-newKey :: Keyring s (Key s a)
-newKey = Keyring $ \ r -> unsafePerformIO . atomicModifyIORef' r $ liftA2 (,) (+1) Key
+newKey :: Applicative p => KeyringT s p (Key s a)
+newKey = KeyringT . ReaderT $ \ r -> pure . unsafePerformIO . atomicModifyIORef' r $ liftA2 (,) (+1) Key
+
+type Keyring s = KeyringT s Identity
 
 unKeyring :: (∀ s . Keyring s a) -> a
-unKeyring (Keyring f) = f $ unsafePerformIO $ newIORef 0
+unKeyring x = runIdentity (unKeyringT x)
+
+newtype KeyringT s f a = KeyringT (ReaderT (IORef Natural) f a)
+  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, MonadFix, MonadFail, MonadTrans)
+
+unKeyringT :: (∀ s . KeyringT s f a) -> f a
+unKeyringT (KeyringT (ReaderT f)) = f $ unsafePerformIO $ newIORef 0
