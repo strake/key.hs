@@ -1,13 +1,13 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Control.Monad.Trans.Key (Key, newKey, Keyring, unKeyring, KeyringT, unKeyringT) where
+module Control.Monad.Trans.Key (Key, newKey, Keyring, unKeyring, KeyringT, unKeyringT, lift) where
 
 import Control.Applicative
 import Control.Monad (MonadPlus (..), guard)
 import Control.Monad.Fail
 import Control.Monad.Fix
-import Control.Monad.Trans.Class
+import Control.Monad.Trans.Class (MonadTrans)
 import Control.Monad.Trans.Reader
 import Data.Functor.Identity
 import Data.IORef
@@ -31,6 +31,9 @@ unKeyring x = runIdentity (unKeyringT x)
 
 newtype KeyringT s f a = KeyringT (ReaderT (IORef Natural) f a)
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus, MonadFix, MonadFail, MonadTrans)
+
+lift :: f a -> KeyringT s f a
+lift = KeyringT . ReaderT . pure
 
 unKeyringT :: (∀ s . KeyringT s f a) -> f a
 unKeyringT (KeyringT (ReaderT f)) = f $ unsafePerformIO $ newIORef 0
